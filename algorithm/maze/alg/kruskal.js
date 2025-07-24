@@ -1,58 +1,117 @@
+/*
+    Reference: https://weblog.jamisbuck.org/2011/1/3/maze-generation-kruskal-s-algorithm
+
+    Note logic kruskal:
+    1. Create a Grid Value Map which represents the value of each grid (in this case, -1 for border, 0 for wall, and 1, 2, 4, 8 for the path)
+    2. Create a Grid Tree Map which represents the grid's connection between each other whether it is connected or not
+       - in this case, refer to the reference above, this tree map will be used to change the block's alphabet
+    3. Create a Unprocessed Grid which will be used to process the grid, and randomize the grid
+    4. Initialize the Grid Value Map and Grid Tree Map
+       - 0 for all, -1 for border
+       - Direction value north, east, south, west will be 1, 2, 4, 8 because 1000, 0100, 0010, 0001
+       - Unprocessed Grid for each y and x % 2 is not 0, so we have a path and a wall
+       - the Direction value will be used as a logic to handle connection between two Processed Grid Path to cross each other (see the logic section below)
+    5. Main logic is in the kruskal function
+       - Pop the Unprocessed Grid, and check the direction of the grid
+       - Check if the grid is out of bounds, if it is, skip the grid
+       - Check if the grid's connection already using the Grid Tree Map, if yes will skip, if no
+         - Set the grid's value with the direction value
+         - Set the wall's value with the opposite direction value
+         - Set the dxGrid and dyGrid with the opposite direction value
+         - Connect the grid's tree with the wall's tree
+         - Connect the dyGrid and dxGrid with the wall's tree
+         - if current direction is north, check the south of the grid, if it has a path then check with this condition
+            - if current grid's value & S (bitwise AND) is not 0, then change the Grid Map Value wall between the path and make it a path
+         - if current direction is west, chec the east of the grid and the south, if it has a path check with this condition
+            - if ((current grid's value | E) & S) (bitwise AND) is not 0, then change the Grid Map Value wall between the path and make it a path
+
+*/
+
 var canvas;
 var ctx;
 var MaxLengthX;
 var MaxLengthY;
 const BlockSize = 15
 const UnProcessedGrid = []
-const MazeMapValue = []
-const GridByValue = []
+const MazeGridValue = []
+const MazeTreeNode = []
+// const MapGridByValue = {}
 const [
-    DirectionNorth,
-    DirectionWest,
-    DirectionSouth,
-    DirectionEast,
-] = [ "N", "W", "S", "E" ]
+    N, S, E, W
+] = [1, 2, 4, 8] // 1000, 0100, 0010, 0001
+const MapDirectionValue = {
+    "N": 1,
+    "S": 2,
+    "E": 4,
+    "W": 8
+}
+const DX = { E: 2, W: -2, N: 0, S: 0 }
+const DY = { E: 0, W: 0, N: -2, S: 2 }
+const DXWall = { E: 1, W: -1, N: 0, S: 0 }
+const DYWall = { E: 0, W: 0, N: -1, S: 1 }
+const OPPOSITE_DIRECTION = {
+    N: "S",
+    S: "N",
+    E: "W",
+    W: "E"
+}
 
-class GridData {
-    constructor(x, y) {
+class TreeNode {
+    parent = null;
+
+    constructor() {
+        this.parent = null
+    }
+
+    root() {
+        return this.parent === null ? this : this.parent.root();
+    }
+
+    isChildOfNode(node) {
+        return this.root() === node.root()
+    }
+
+    connect(node) {
+        node.root().parent = this;
+    }
+}
+
+class UnprocessedGridData {
+    constructor(x, y, direction) {
         this.x = x
         this.y = y
+        this.direction = direction
     }
 }
 
 function initializeMapGrids(width, height) {
+    // Determine max length of X and Y
     MaxLengthX = width / BlockSize
     MaxLengthY = height / BlockSize
 
-    // start from 0 - lastIndex-1
-    var xStartEdge = 0
-    var yStartEdge = 0
-    var xLastEdge = MaxLengthX - 1
-    var yLastEdge = MaxLengthY - 1
-
     // i = y, j = x
-    var posValue = 1;
     for ( var i = 0 ; i < MaxLengthY ; i++) {
-        MazeMapValue[i] = []
+        MazeGridValue[i] = []
+        MazeTreeNode[i] = []
         for (var j = 0 ; j < MaxLengthX ; j++) {
-            mapVal = 0
+            var isUnprocessedGrid = false
+            var mapVal = 0
 
-            if (i == yStartEdge || i == yLastEdge || j == xStartEdge || j == xLastEdge) { // for border map
-                mapVal = 0
+            if (i == 0 || i == MaxLengthY-1 || j == 0 || j == MaxLengthX-1) { // for border map
+                mapVal = -1
             } else {
                 if (j%2 != 0 && i%2 != 0) {
-                    mapVal = posValue
-                    posValue++
+                    isUnprocessedGrid = true // grid will be processed
                 } else {
-                    mapVal = 0
+                    mapVal = 0 // wall
                 }
             }
 
-            MazeMapValue[i][j] = mapVal
-            if (mapVal != 0) {
-                var gridData = new GridData(j, i)
-                UnProcessedGrid.push(gridData)
-                GridByValue[mapVal] = [gridData]
+            MazeGridValue[i][j] = mapVal
+            MazeTreeNode[i][j] = new TreeNode()
+            if (isUnprocessedGrid) {
+                UnProcessedGrid.push(new UnprocessedGridData(j, i, "N"))
+                UnProcessedGrid.push(new UnprocessedGridData(j, i, "W"))
             }
         }
     }
@@ -71,167 +130,35 @@ function shuffle(array) {
   }
 }
 
-function simpleKruskal() {
-    if (UnProcessedGrid.length > 0) {
-        var processingGrid = UnProcessedGrid.pop()
-        var processingMapValue = MazeMapValue[processingGrid.y][processingGrid.x]
-        var stringDirection = "NWSE";
-        var startDirIdx = Math.floor(Math.random() * (stringDirection.length-1))
-        var dx, dy;
-
-        var isNextValid = false
-        var dirIdx = startDirIdx
-        while (!isNextValid) {
-            var direction = stringDirection.charAt(dirIdx)
-
-            if (direction == DirectionNorth) [dy, dx] = [processingGrid.y + 2, processingGrid.x + 0]
-            else if (direction == DirectionWest) [dy, dx] = [processingGrid.y + -2, processingGrid.x + 0]
-            else if (direction == DirectionSouth) [dy, dx] = [processingGrid.y + 0, processingGrid.x -2]
-            else if (direction == DirectionEast) [dy, dx] = [processingGrid.y + 0, processingGrid.x + 2]
-
-            if (dy > 0 && dy < MazeMapValue.length) {
-                if (dx > 0 && dx < MazeMapValue.length) {
-                    if (MazeMapValue[dy][dx] != processingMapValue) {
-                        isNextValid = true
-                    }
-                }
-            }
-
-            dirIdx = dirIdx + 1
-            if (dirIdx >= stringDirection.length) {
-                dirIdx = 0
-            }
-
-            if (dirIdx == startDirIdx) {
-                break
-            }
-        }
-
-        if (isNextValid) {
-            if (processingGrid.y > dy) {
-                for (var i = dy ; i <= processingGrid.y ; i++) {
-                    MazeMapValue[i][processingGrid.x] = processingMapValue
-                }
-            } else if (dy > processingGrid.y) {
-                for (var i = processingGrid.y ; i <= dy ; i++) {
-                    MazeMapValue[i][processingGrid.x] = processingMapValue
-                }
-            } else if (processingGrid.x > dx) {
-                for (var i = dx ; i <= processingGrid.x ; i++) {
-                    MazeMapValue[processingGrid.y][i] = processingMapValue
-                }
-            } else if (dx > processingGrid.x) {
-                for (var i = processingGrid.x ; i <= dx ; i++) {
-                    MazeMapValue[processingGrid.y][i] = processingMapValue
-                }
-            }
-        }
-    }
-}
-
 function kruskal() {
     if (UnProcessedGrid.length > 0) {
-        var processingGrid = UnProcessedGrid.pop()
-        var processingMapValue = MazeMapValue[processingGrid.y][processingGrid.x]
-        var stringDirection = "NWSE";
-        var startDirIdx = Math.floor(Math.random() * (stringDirection.length-1))
-        var dx, dy;
-
-        var isNextValid = false
-        var dirIdx = startDirIdx
-        while (!isNextValid) {
-            var direction = stringDirection.charAt(dirIdx)
-
-            if (direction == DirectionNorth) [dy, dx] = [processingGrid.y + 2, processingGrid.x + 0]
-            else if (direction == DirectionWest) [dy, dx] = [processingGrid.y + -2, processingGrid.x + 0]
-            else if (direction == DirectionSouth) [dy, dx] = [processingGrid.y + 0, processingGrid.x -2]
-            else if (direction == DirectionEast) [dy, dx] = [processingGrid.y + 0, processingGrid.x + 2]
-
-            if (dy > 0 && dy < MazeMapValue.length) {
-                if (dx > 0 && dx < MazeMapValue.length) {
-                    if (MazeMapValue[dy][dx] != processingMapValue) {
-                        isNextValid = true
-                    }
-                }
-            }
-
-            dirIdx = dirIdx + 1
-            if (dirIdx >= stringDirection.length) {
-                dirIdx = 0
-            }
-
-            if (dirIdx == startDirIdx) {
-                break
-            }
+        var processingGrid = UnProcessedGrid.pop();
+        var dxGrid = processingGrid.x + DX[processingGrid.direction];
+        var dyGrid = processingGrid.y + DY[processingGrid.direction];
+        var dxGridWall = processingGrid.x + DXWall[processingGrid.direction];
+        var dyGridWall = processingGrid.y + DYWall[processingGrid.direction];
+        
+        if (dxGrid < 0 || dxGrid >= MaxLengthX || dyGrid < 0 || dyGrid >= MaxLengthY) {
+            return; // skip if out of bounds
         }
         
-        // Update map value
-        if (isNextValid) {
-            var gridByValueArr = []
+        if (!MazeTreeNode[processingGrid.y][processingGrid.x].isChildOfNode(MazeTreeNode[dyGrid][dxGrid])) {
+            MazeGridValue[processingGrid.y][processingGrid.x] |= MapDirectionValue[processingGrid.direction];
+            MazeGridValue[dyGridWall][dxGridWall] |= MapDirectionValue[OPPOSITE_DIRECTION[processingGrid.direction]];
+            MazeGridValue[dyGrid][dxGrid] |= MapDirectionValue[OPPOSITE_DIRECTION[processingGrid.direction]];
 
-            if (processingGrid.y > dy) {
-                for (var i = dy ; i <= processingGrid.y ; i++) {
-                    var targetMapVal = MazeMapValue[i][processingGrid.x]
-                    if (targetMapVal > 0 && targetMapVal != processingMapValue) {
-                        for (var j = 0 ; j < GridByValue[targetMapVal].length ; j++) {
-                            var targetGrid = GridByValue[targetMapVal][j]
-                            MazeMapValue[targetGrid.y][targetGrid.x] = processingMapValue
-                            gridByValueArr.push(targetGrid)
-                        }
-                        GridByValue[targetMapVal] = []
-                    } else {
-                        MazeMapValue[i][processingGrid.x] = processingMapValue
-                        gridByValueArr.push(new GridData(processingGrid.x, i))
-                    }
-                }
-            } else if (dy > processingGrid.y) {
-                for (var i = processingGrid.y ; i <= dy ; i++) {
-                    var targetMapVal = MazeMapValue[i][processingGrid.x]
-                    if (targetMapVal > 0 && targetMapVal != processingMapValue) {
-                        for (var j = 0 ; j < GridByValue[targetMapVal].length ; j++) {
-                            var targetGrid = GridByValue[targetMapVal][j]
-                            MazeMapValue[targetGrid.y][targetGrid.x] = processingMapValue
-                            gridByValueArr.push(targetGrid)
-                        }
-                        GridByValue[targetMapVal] = []
-                    } else {
-                        MazeMapValue[i][processingGrid.x] = processingMapValue
-                        gridByValueArr.push(new GridData(processingGrid.x, i))
-                    }
-                }
-            } else if (processingGrid.x > dx) {
-                for (var i = dx ; i <= processingGrid.x ; i++) {
-                    var targetMapVal = MazeMapValue[processingGrid.y][i]
-                    if (targetMapVal > 0 && targetMapVal != processingMapValue) {
-                        for (var j = 0 ; j < GridByValue[targetMapVal].length ; j++) {
-                            var targetGrid = GridByValue[targetMapVal][j]
-                            MazeMapValue[targetGrid.y][targetGrid.x] = processingMapValue
-                            gridByValueArr.push(targetGrid)
-                        }
-                        GridByValue[targetMapVal] = []
-                    } else {
-                        MazeMapValue[processingGrid.y][i] = processingMapValue
-                        gridByValueArr.push(new GridData(i, processingGrid.y))
-                    }
-                }
-            } else if (dx > processingGrid.x) {
-                for (var i = processingGrid.x ; i <= dx ; i++) {
-                    var targetMapVal = MazeMapValue[processingGrid.y][i]
-                    if (targetMapVal > 0 && targetMapVal != processingMapValue) {
-                        for (var j = 0 ; j < GridByValue[targetMapVal].length ; j++) {
-                            var targetGrid = GridByValue[targetMapVal][j]
-                            MazeMapValue[targetGrid.y][targetGrid.x] = processingMapValue
-                            gridByValueArr.push(targetGrid)
-                        }
-                        GridByValue[targetMapVal] = []
-                    } else {
-                        MazeMapValue[processingGrid.y][i] = processingMapValue
-                        gridByValueArr.push(new GridData(i, processingGrid.y))
-                    }
-                }
+            MazeTreeNode[processingGrid.y][processingGrid.x].connect(MazeTreeNode[dyGridWall][dxGridWall]);
+            MazeTreeNode[dyGrid][dxGrid].connect(MazeTreeNode[dyGridWall][dxGridWall]);
+
+            if ((MazeGridValue[processingGrid.y][processingGrid.x] & S) !== 0) {
+                MazeGridValue[processingGrid.y + 1][processingGrid.x] |= MazeGridValue[processingGrid.y][processingGrid.x];
             }
-            
-            GridByValue[processingMapValue] = gridByValueArr
+
+            if ((MazeGridValue[processingGrid.y][processingGrid.x] & E) !== 0) {
+                if (((MazeGridValue[processingGrid.y][processingGrid.x] | MazeGridValue[processingGrid.y][processingGrid.x]) & S) != 0) {
+                    MazeGridValue[processingGrid.y][processingGrid.x + 1] |= MazeGridValue[processingGrid.y][processingGrid.x];
+                }
+            } 
         }
     }
 }
@@ -241,11 +168,10 @@ function delay(time) {
 }
 
 function draw() {
-    // kruskal
-    simpleKruskal();
+    kruskal()
     for (var i = 0 ; i < MaxLengthY ; i++) {
         for (var j = 0 ; j < MaxLengthX ; j++) {
-            if (MazeMapValue[i][j] == 0) {
+            if (MazeGridValue[i][j] == 0 || MazeGridValue[i][j] == -1) {
                 ctx.fillStyle = "black"
                 ctx.fillRect(j*BlockSize, i*BlockSize, BlockSize, BlockSize)
             } else {
@@ -254,7 +180,7 @@ function draw() {
             }
         }
     }
-    // delay(1000).then(() => window.requestAnimationFrame(draw));
+    // delay(10000).then(() => window.requestAnimationFrame(draw));
     window.requestAnimationFrame(draw)
 }
 
