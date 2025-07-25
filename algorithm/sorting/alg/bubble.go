@@ -7,6 +7,13 @@ func BubbleSort(arr []int, sortType SortType) {
 		isPosChange bool
 	)
 
+	switch sortType {
+	case SortyTypeDESC:
+		break
+	default:
+		sortType = SortTypeASC
+	}
+
 	for i := 0; i < len(arr); i++ {
 		for j := i; j < len(arr); j++ {
 			isPosChange = false

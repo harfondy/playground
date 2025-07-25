@@ -42,4 +42,15 @@ func main() {
 	alg.MergeSort(arrCase, alg.SortTypeASC)
 	fmt.Printf("[MergeSort] End Time: %v, Duration: %v\n", time.Now(), time.Since(startTime))
 	fmt.Println("Result: ", arrCase)
+
+	fmt.Printf("\n\n")
+
+	arrCase = append([]int{}, arr...)
+	startTime = time.Now()
+
+	fmt.Println("Case: ", arrCase)
+	fmt.Printf("[QuickSort] Start Time: %v\n", startTime)
+	alg.QuickSort(arrCase, alg.SortTypeASC)
+	fmt.Printf("[QuickSort] End Time: %v, Duration: %v\n", time.Now(), time.Since(startTime))
+	fmt.Println("Result: ", arrCase)
 }

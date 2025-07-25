@@ -54,5 +54,12 @@ func mergeSortFunc(arr []int, left int, right int, sortType SortType) {
 }
 
 func MergeSort(arr []int, sortType SortType) {
+	switch sortType {
+	case SortyTypeDESC:
+		break
+	default:
+		sortType = SortTypeASC
+	}
+
 	mergeSortFunc(arr, 0, len(arr)-1, sortType)
 }
