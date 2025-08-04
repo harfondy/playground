@@ -1,11 +1,29 @@
 <html>
     <head>
         <title>Maze Algorithm</title>
-        <script type="text/javascript" src="alg/kruskal.js" type="module"></script>
+        <script type="text/javascript" src="kruskal/kruskal-script.js" type="module"></script>
+        <script type="text/javascript" src="prim/prim-script.js" type="module"></script>
+        <script>
+            window.onload = function() {
+                MainKruskal();
+                MainPrim();
+            }
+        </script>
     </head>
-    <body>
-        <canvas id="canvas-maze-kruskal" width="465" height="465">
-            Your browser does not support HTML5
-        </canvas>
+    <body style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <h2>Kruskal</h2>
+            <canvas id="canvas-maze-kruskal" width="465" height="465">
+                Your browser does not support HTML5
+            </canvas>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 25px">
+            <h2>Prim</h2>
+        
+            <canvas id="canvas-maze-prim" width="465" height="465">
+                Your browser does not support HTML5
+            </canvas>
+        </div>
     </body>
 </html>
